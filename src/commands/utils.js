@@ -1,11 +1,38 @@
 // Utils Commands - Developer: Xeyal
 const axios = require('axios');
 const QRCode = require('qrcode');
-const { create } = require('mathjs');
-const math = create({});
+const { create, all } = require('mathjs');
+const math = create(all);
 const fs = require('fs-extra');
 const path = require('path');
 const settingsPath = path.join(__dirname, '../../data/settings.json');
+
+// ── AFK Yoxlama Məntiqi (Avtomatik Cavab Vermə) ──────────────
+async function handleAfkCheck(ctx) {
+  const { sock, msg, jid, sender } = ctx;
+  const settings = fs.readJsonSync(settingsPath, { throws: false }) || {};
+  if (!settings.afkUsers) return;
+
+  const myNum = sock.user.id.split(':')[0];
+
+  // 1. Əgər AFK olan şəxs (sən) mesaj yazsa, AFK-dan çıxart
+  if (sender.includes(myNum) && settings.afkUsers[myNum]) {
+    delete settings.afkUsers[myNum];
+    fs.writeJsonSync(settingsPath, settings, { spaces: 2 });
+    return sock.sendMessage(jid, { text: '✅ *Artıq aktivsiniz! AFK rejimi ləğv edildi.*' }, { quoted: msg });
+  }
+
+  // 2. Kimsə səni tag edərsə və ya sənə yazarsa səbəbi göndər
+  const mentionedJids = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+  for (let afkNum in settings.afkUsers) {
+    if (mentionedJids.includes(`${afkNum}@s.whatsapp.net`) || (!jid.endsWith('@g.us') && jid.includes(afkNum))) {
+      const data = settings.afkUsers[afkNum];
+      const timeDiff = Math.floor((Date.now() - data.time) / 60000);
+      const text = `😴 *Hazırda AFK-dır!*\n\n📝 *Səbəb:* ${data.reason}\n⏱ *Nə vaxtdan:* ${timeDiff} dəqiqə əvvəl`;
+      await sock.sendMessage(jid, { text }, { quoted: msg });
+    }
+  }
+}
 
 // ── Hava Məlumatı ───────────────────────────────────────────
 async function weather(ctx) {
@@ -109,7 +136,7 @@ async function crypto(ctx) {
       params: { ids: coin, vs_currencies: 'usd,eur,try,azn' }
     });
     const data = res.data[coin];
-    if (!data) return sock.sendMessage(jid, { text: `❌ *${coin}* coin tapılmadı!` }, { quoted: msg });
+    if (!data) return sock.sendMessage(jid, { text: `❌ *${coin}* tapılmadı!` }, { quoted: msg });
     const text = `💰 *${coin.toUpperCase()} Qiymətləri*\n\n` +
       `📊 ${amount} ${coin.toUpperCase()} =\n` +
       `💵 USD: *$${(data.usd * amount).toFixed(2)}*\n` +
@@ -260,6 +287,6 @@ async function toggleAutoRead(ctx) {
 
 module.exports = {
   weather, translate, qrCode, calculate, password, crypto, currency,
-  ipLookup, shortenUrl, urbanDict, setAfk, removeAfk,
+  ipLookup, shortenUrl, urbanDict, setAfk, removeAfk, handleAfkCheck,
   toggleAntiDelete, togglePmPermit, toggleAutoRead
 };
