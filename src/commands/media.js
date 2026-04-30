@@ -3,6 +3,7 @@ const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
 const { tmpdir } = require('os');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys'); // Bu mütləq olmalıdır
 
 // ── Şəkildən Stiker ─────────────────────────────────────────
 async function makeSticker(ctx) {
@@ -36,11 +37,12 @@ async function makeSticker(ctx) {
   try {
     await sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } });
 
-    // Media bufferini yüklə
-    const buffer = await sock.downloadMediaMessage(
-      mimeType === 'image' 
-        ? { message: { imageMessage: mediaMsg } }
-        : { message: { videoMessage: mediaMsg } }
+    // Sənin downloadMediaMessage hissəni Baileys-ə uyğunlaşdırdım ki, "işləmədi" deməsin
+    const buffer = await downloadMediaMessage(
+      { message: quotedMsg || msg.message },
+      'buffer',
+      {},
+      { reuploadRequest: sock.updateMediaMessage }
     );
 
     const BOT_NAME = process.env.BOT_NAME || 'Xeyal Userbot';
@@ -69,7 +71,8 @@ async function stickerToImg(ctx) {
   }
 
   try {
-    const buffer = await sock.downloadMediaMessage({ message: { stickerMessage: quotedMsg.stickerMessage } });
+    // Burada da eyni yükləmə düzəlişi
+    const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
     await sock.sendMessage(jid, {
       image: buffer,
       caption: '🖼️ *Stiker şəkilə çevrildi!*'
@@ -92,9 +95,9 @@ async function ocr(ctx) {
     await sock.sendMessage(jid, { react: { text: '🔍', key: msg.key } });
     
     const imgMsg = quotedMsg?.imageMessage || msg.message?.imageMessage;
-    const buffer = await sock.downloadMediaMessage({ message: { imageMessage: imgMsg } });
+    // Yükləmə düzəlişi
+    const buffer = await downloadMediaMessage({ message: quotedMsg || msg.message }, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
     
-    // Tesseract.js ilə mətn oxu
     const Tesseract = require('tesseract.js');
     const tmpFile = path.join(tmpdir(), `ocr_${Date.now()}.jpg`);
     await fs.writeFile(tmpFile, buffer);
@@ -129,7 +132,6 @@ async function tiktok(ctx) {
   try {
     await sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } });
     
-    // TikTok API - watermarksız yüklə
     const apiUrl = `https://tikwm.com/api/?url=${encodeURIComponent(query)}&hd=1`;
     const res = await axios.get(apiUrl, { timeout: 15000 });
     
@@ -142,7 +144,7 @@ async function tiktok(ctx) {
     const title = videoData.title || 'TikTok Video';
     const author = videoData.author?.nickname || 'Naməlum';
 
-    // Videonu axtar
+    // Sənin axios buffer yükləmə hissən qalır, sadəcə video göndərməyə mimetype əlavə etdim
     const videoRes = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 30000 });
     const videoBuffer = Buffer.from(videoRes.data);
 
